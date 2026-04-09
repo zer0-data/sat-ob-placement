@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -9,6 +9,10 @@ from seeing_unseen.core.registry import registry
 from seeing_unseen.models.base import SPModel
 from seeing_unseen.models.encoders.clip_encoder import ResNetCLIPEncoder
 from seeing_unseen.models.encoders.fusion import FusionConvLat, FusionMult
+from seeing_unseen.models.encoders.remote_clip_encoder import (
+    RemoteCLIPRN50Encoder,
+    RemoteCLIPViTEncoder,
+)
 from seeing_unseen.models.encoders.resnet import ConvBlock, IdentityBlock
 from seeing_unseen.models.encoders.unet import Up
 
@@ -327,3 +331,234 @@ class CLIPUNet(CLIPUNetImgQuery):
             )
             output["affordance"] = x
         return output
+
+
+# =============================================================================
+# RemoteCLIP drop-in models
+# =============================================================================
+
+@registry.register_affordance_model(name="remote_clip_unet_img_query")
+class RemoteCLIPUNetImgQuery(CLIPUNetImgQuery):
+    """
+    CLIPUNetImgQuery with RemoteCLIP RN50 image encoder (visual-query variant).
+
+    Drop-in swap: only init_clip() and init_target_encoder() are overridden.
+    The entire UNet decoder is inherited unchanged.
+
+    Config keys consumed (under model.remote_clip in clip_unet.yaml):
+        model_type       : "RN50" (default)
+        checkpoint_path  : path to RemoteCLIP-RN50.pt
+    """
+
+    def __init__(
+        self,
+        input_shape: tuple,
+        target_input_shape: tuple,
+        output_dim: int = 1,
+        upsample_factor: int = 2,
+        bilinear: bool = True,
+        batchnorm: bool = True,
+        remote_clip_cfg: Optional[dict] = None,
+    ) -> None:
+        self._remote_clip_cfg = remote_clip_cfg or {}
+        super().__init__(
+            input_shape, target_input_shape, output_dim,
+            upsample_factor, bilinear, batchnorm,
+        )
+
+    def init_clip(self):
+        checkpoint_path = self._remote_clip_cfg.get("checkpoint_path", None)
+        self.clip = RemoteCLIPRN50Encoder(
+            input_shape=self.input_shape,
+            backbone_type="prepool",
+            checkpoint_path=checkpoint_path,
+        )
+        self.clip_out_dim = self.clip.output_shape[0]   # 2048
+        logger.info("RemoteCLIPUNetImgQuery: using RemoteCLIP RN50 image encoder.")
+
+    def init_target_encoder(self):
+        checkpoint_path = self._remote_clip_cfg.get("checkpoint_path", None)
+        self.target_encoder = RemoteCLIPRN50Encoder(
+            input_shape=self.target_input_shape,
+            backbone_type="none",
+            checkpoint_path=checkpoint_path,
+        )
+        self.target_encoder_out_dim = self.target_encoder.output_shape[0]   # 2048
+
+
+@registry.register_affordance_model(name="remote_clip_unet")
+class RemoteCLIPUNet(CLIPUNet):
+    """
+    CLIPUNet (text-query variant) with RemoteCLIP RN50 image encoder.
+
+    Drop-in swap: only init_clip() is overridden.
+    The language-fusion layers and all decoder blocks are inherited from CLIPUNet.
+
+    Config keys consumed (under model.remote_clip in clip_unet.yaml):
+        model_type       : "RN50" (default)
+        checkpoint_path  : path to RemoteCLIP-RN50.pt
+    """
+
+    def __init__(
+        self,
+        input_shape: tuple,
+        target_input_shape: tuple,
+        output_dim: int = 1,
+        upsample_factor: int = 2,
+        bilinear: bool = True,
+        batchnorm: bool = True,
+        remote_clip_cfg: Optional[dict] = None,
+    ) -> None:
+        self._remote_clip_cfg = remote_clip_cfg or {}
+        super().__init__(
+            input_shape, target_input_shape, output_dim,
+            upsample_factor, bilinear, batchnorm,
+        )
+
+    def init_clip(self):
+        checkpoint_path = self._remote_clip_cfg.get("checkpoint_path", None)
+        self.clip = RemoteCLIPRN50Encoder(
+            input_shape=self.input_shape,
+            backbone_type="prepool",
+            checkpoint_path=checkpoint_path,
+        )
+        self.clip_out_dim = self.clip.output_shape[0]   # 2048
+        logger.info("RemoteCLIPUNet: using RemoteCLIP RN50 image encoder.")
+
+
+@registry.register_affordance_model(name="remote_clip_vit_unet")
+class RemoteCLIPViTUNet(SPModel):
+    """
+    UNet decoder paired with a RemoteCLIP ViT encoder (ViT-B-32 or ViT-L-14).
+
+    Because ViT produces 768- or 1024-channel spatial grids (not 2048), the
+    decoder channel widths are adapted.  The text query (target_query) is
+    fused via multiplicative FusionMult at three decoder stages, mirroring
+    the CLIPUNet design.
+
+    Config keys consumed (under model.remote_clip):
+        model_type       : "ViT-B-32" or "ViT-L-14" (default "ViT-B-32")
+        checkpoint_path  : path to RemoteCLIP ViT checkpoint
+    """
+
+    def __init__(
+        self,
+        input_shape: tuple,
+        target_input_shape: tuple,
+        output_dim: int = 1,
+        upsample_factor: int = 2,
+        bilinear: bool = True,
+        batchnorm: bool = True,
+        remote_clip_cfg: Optional[dict] = None,
+    ) -> None:
+        super().__init__()
+
+        cfg = remote_clip_cfg or {}
+        self.input_shape = input_shape
+        self.target_input_shape = target_input_shape
+        self.output_dim = output_dim
+        self.upsample_factor = upsample_factor
+        self.bilinear = bilinear
+        self.batchnorm = batchnorm
+
+        model_type = cfg.get("model_type", "ViT-B-32")
+        checkpoint_path = cfg.get("checkpoint_path", None)
+
+        # ------------------------------------------------------------------
+        # ViT image encoder
+        # ------------------------------------------------------------------
+        self.vit = RemoteCLIPViTEncoder(
+            model_type=model_type,
+            checkpoint_path=checkpoint_path,
+        )
+        D = self.vit.embed_dim          # 768 or 1024
+        self.clip_out_dim = D
+
+        logger.info(
+            f"RemoteCLIPViTUNet: model={model_type}, embed_dim={D}, "
+            f"grid={self.vit.grid_size}×{self.vit.grid_size}"
+        )
+
+        # ------------------------------------------------------------------
+        # Text query embedding dim (same size as ViT CLS for simplicity)
+        # We reuse the ViT CLS token as the scene-level feature; the text
+        # query is encoded separately via open_clip.encode_text when called.
+        # target_encoder_out_dim mirrors this.
+        # ------------------------------------------------------------------
+        self.target_encoder_out_dim = D
+
+        # ------------------------------------------------------------------
+        # Decoder (channel widths scaled to D instead of 2048)
+        # ------------------------------------------------------------------
+        half = D // 2       # 384 or 512
+        qtr  = D // 4       # 192 or 256
+        eth  = D // 8       # 96  or 128
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(D, D, kernel_size=3, padding=1, bias=False),
+            nn.ReLU(inplace=True),
+        )
+
+        self.lang_proj1 = nn.Linear(D, D)
+        self.lang_proj2 = nn.Linear(D, half)
+        self.lang_proj3 = nn.Linear(D, qtr)
+
+        self.lang_fuser1 = FusionMult(input_dim=D)
+        self.lang_fuser2 = FusionMult(input_dim=half)
+        self.lang_fuser3 = FusionMult(input_dim=qtr)
+
+        self.up1 = Up(D,    half // upsample_factor, bilinear)
+        self.up2 = Up(half, qtr  // upsample_factor, bilinear)
+        self.up3 = Up(qtr,  eth  // upsample_factor, bilinear)
+
+        self.layer1 = nn.Sequential(
+            ConvBlock(eth // 2, [64, 64, 64], kernel_size=3, stride=1, batchnorm=batchnorm),
+            IdentityBlock(64, [64, 64, 64], kernel_size=3, stride=1, batchnorm=batchnorm),
+            nn.UpsamplingBilinear2d(scale_factor=upsample_factor),
+        )
+        self.layer2 = nn.Sequential(
+            ConvBlock(64, [32, 32, 32], kernel_size=3, stride=1, batchnorm=batchnorm),
+            IdentityBlock(32, [32, 32, 32], kernel_size=3, stride=1, batchnorm=batchnorm),
+            nn.UpsamplingBilinear2d(scale_factor=upsample_factor),
+        )
+        self.layer3 = nn.Sequential(
+            ConvBlock(32, [16, 16, 16], kernel_size=3, stride=1, batchnorm=batchnorm),
+            IdentityBlock(16, [16, 16, 16], kernel_size=3, stride=1, batchnorm=batchnorm),
+            nn.UpsamplingBilinear2d(scale_factor=upsample_factor),
+        )
+        self.conv2 = nn.Sequential(nn.Conv2d(16, output_dim, kernel_size=1))
+        self.activation = nn.Sigmoid()
+
+    def forward(self, **kwargs) -> Dict[str, torch.Tensor]:
+        batch = kwargs["batch"]
+        receptacle = batch["image"]
+        target = batch["target_query"]      # (B, D) text embedding or category token
+
+        input_shape = receptacle.shape
+
+        # ViT encoder — returns (cls_feat, [4 × spatial grids])
+        cls_feat, spatial_feats = self.vit(receptacle)
+        # spatial_feats: [layer25%, layer50%, layer75%, layer100%]
+        # Use the last two as skip connections (finest features)
+        skip_deep   = spatial_feats[-1]     # (B, D, 7, 7) — deepest
+        skip_mid    = spatial_feats[-2]     # (B, D, 7, 7)
+        skip_shallow = spatial_feats[-3]    # (B, D, 7, 7)
+
+        x = self.conv1(skip_deep)
+
+        x = self.lang_fuser1(x, target, x2_proj=self.lang_proj1)
+        x = self.up1(x, skip_mid)
+
+        x = self.lang_fuser2(x, target, x2_proj=self.lang_proj2)
+        x = self.up2(x, skip_shallow)
+
+        x = self.lang_fuser3(x, target, x2_proj=self.lang_proj3)
+        x = self.up3(x, spatial_feats[-4])
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.conv2(x)
+        x = F.interpolate(x, size=(input_shape[-2], input_shape[-1]), mode="bilinear")
+
+        return {"affordance": x}

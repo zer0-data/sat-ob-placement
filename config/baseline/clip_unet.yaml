@@ -72,7 +72,10 @@ training:
     - "val"
 
 model:
-  name: "clip_unet"
+  # Original OpenAI CLIP UNet:
+  #   name: "clip_unet"
+  # RemoteCLIP RN50 (drop-in, same decoder architecture):
+  name: "remote_clip_unet"
   type: "clip"
   pretrained_checkpoint: null
 
@@ -80,7 +83,7 @@ model:
 
   image_size: 224
 
-  # These numbers come from CLIP.
+  # Normalization constants — same as OpenAI CLIP / OpenCLIP RN50
   rgb_means:
     - 0.48145466
     - 0.4578275
@@ -91,8 +94,18 @@ model:
     - 0.27577711
 
   clip:
-    # Must be in "RN50" or "RN50x16"
+    # Must be in "RN50" or "RN50x16" (used only when model.name is "clip_unet")
     model_type: "RN50"
+
+  # --- RemoteCLIP settings (used when model.name starts with "remote_clip") ---
+  remote_clip:
+    # Architecture: "RN50" | "ViT-B-32" | "ViT-L-14"
+    model_type: "RN50"
+    # Path to downloaded RemoteCLIP checkpoint.
+    # Download: python -c "from huggingface_hub import hf_hub_download;
+    #   hf_hub_download(repo_id='chendelong/RemoteCLIP',
+    #   filename='RemoteCLIP-RN50.pt', local_dir='data/pretrained_models')"
+    checkpoint_path: "data/pretrained_models/RemoteCLIP-RN50.pt"
 
 distributed:
   backend: "GLOO"

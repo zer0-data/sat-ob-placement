@@ -13,6 +13,7 @@ glide-text2im==0.0.0
 gputil==1.4.0
 groundingdino==0.1.0
 home-robot==0.1.0
+huggingface-hub>=0.17.0
 img2dataset==1.42.0
 imgaug==0.4.0
 isoduration==20.11.0
@@ -25,6 +26,7 @@ llava==1.1.1
 magnum==0.0.0
 mss==9.0.1
 natsort==8.4.0
+open-clip-torch>=2.20.0
 patchify==0.2.3
 prior==1.0.3
 procthor==0.0.1.dev2
