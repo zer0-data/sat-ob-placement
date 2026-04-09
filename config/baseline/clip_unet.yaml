@@ -14,6 +14,10 @@ dataset:
   val_dir: "data/datasets/floorplanner_inpainting_v5/"
   train_transforms: "segmentation_base"
   val_transforms: "segmentation_base"
+  # Switch to RemoteCLIP prompt-conditioned embeddings once generated:
+  #   python scripts/generate_remote_clip_embeddings.py --input ... --output ...
+  # Use "clip_embeddings.pkl" to fall back to original OpenAI CLIP embeddings.
+  embeddings_file: "remote_clip_embeddings.pkl"
 
   transform_args:
     resize_prob: 0.0
@@ -106,6 +110,17 @@ model:
     #   hf_hub_download(repo_id='chendelong/RemoteCLIP',
     #   filename='RemoteCLIP-RN50.pt', local_dir='data/pretrained_models')"
     checkpoint_path: "data/pretrained_models/RemoteCLIP-RN50.pt"
+
+    # --- Prompt Engineering: satellite-domain text templates ---
+    # Used by RemoteCLIPTextEncoder for both on-the-fly encoding and
+    # the generate_remote_clip_embeddings.py script.
+    # Each template must contain {c} as the category placeholder.
+    text_templates:
+      - "an aerial view of a {c}"
+      - "a satellite image of a {c}"
+      - "a top-down view of a {c}"
+      - "a remote sensing image of a {c}"
+      - "a bird's eye view of a {c}"
 
 # -------------------------------------------------------------------
 # Terrain Guardrailing (VocAda-Inspired Validity Mask)

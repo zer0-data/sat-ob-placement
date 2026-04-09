@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -12,6 +12,10 @@ from seeing_unseen.models.encoders.fusion import FusionConvLat, FusionMult
 from seeing_unseen.models.encoders.remote_clip_encoder import (
     RemoteCLIPRN50Encoder,
     RemoteCLIPViTEncoder,
+)
+from seeing_unseen.models.encoders.remote_clip_text_encoder import (
+    REMOTE_SENSING_TEMPLATES,
+    RemoteCLIPTextEncoder,
 )
 from seeing_unseen.models.encoders.resnet import ConvBlock, IdentityBlock
 from seeing_unseen.models.encoders.unet import Up
@@ -395,8 +399,16 @@ class RemoteCLIPUNet(CLIPUNet):
     The language-fusion layers and all decoder blocks are inherited from CLIPUNet.
 
     Config keys consumed (under model.remote_clip in clip_unet.yaml):
-        model_type       : "RN50" (default)
-        checkpoint_path  : path to RemoteCLIP-RN50.pt
+        model_type          : "RN50" (default)
+        checkpoint_path     : path to RemoteCLIP-RN50.pt
+        text_templates      : optional list of template strings (default: 5 satellite templates)
+
+    On-the-fly text encoding
+    ------------------------
+    If batch["target_query"] is a list of strings (e.g. during zero-shot inference
+    without a pre-built pkl), the model encodes them on-the-fly using the
+    RemoteCLIPTextEncoder with satellite-domain prompt templates.
+    If it is a pre-computed float tensor (normal training path), it is used directly.
     """
 
     def __init__(
@@ -414,6 +426,7 @@ class RemoteCLIPUNet(CLIPUNet):
             input_shape, target_input_shape, output_dim,
             upsample_factor, bilinear, batchnorm,
         )
+        self._init_text_encoder()
 
     def init_clip(self):
         checkpoint_path = self._remote_clip_cfg.get("checkpoint_path", None)
@@ -424,6 +437,51 @@ class RemoteCLIPUNet(CLIPUNet):
         )
         self.clip_out_dim = self.clip.output_shape[0]   # 2048
         logger.info("RemoteCLIPUNet: using RemoteCLIP RN50 image encoder.")
+
+    def _init_text_encoder(self):
+        """Build the on-the-fly text encoder (used only when target_query is strings)."""
+        checkpoint_path = self._remote_clip_cfg.get("checkpoint_path", None)
+        templates = self._remote_clip_cfg.get("text_templates", REMOTE_SENSING_TEMPLATES)
+        self._text_encoder = RemoteCLIPTextEncoder(
+            model_name="RN50",
+            checkpoint_path=checkpoint_path,
+            templates=templates,
+        )
+        logger.info(
+            f"RemoteCLIPUNet: text encoder ready with {len(templates)} templates — "
+            f"{templates[0]!r} ... {templates[-1]!r}"
+        )
+
+    def _resolve_text_query(
+        self,
+        target_query,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """
+        Normalise target_query to a float tensor (B, D).
+
+        Accepts:
+          - torch.Tensor (float32, B×D)  — pre-computed pkl embedding → used as-is
+          - list[str]                    → encoded on-the-fly with RemoteCLIP + templates
+        """
+        if isinstance(target_query, (list, tuple)) and isinstance(target_query[0], str):
+            # On-the-fly encoding path
+            emb = self._text_encoder.encode(list(target_query)).to(device)
+            return emb
+        # Pre-computed tensor path
+        return target_query.to(device)
+
+    def forward_encoder(self, image, query):
+        # Override to resolve text query before calling parent
+        query = self._resolve_text_query(query, image.device)
+        return super().forward_encoder(image, query)
+
+    def forward(self, **kwargs) -> Dict[str, torch.Tensor]:
+        batch = kwargs["batch"]
+        batch["target_query"] = self._resolve_text_query(
+            batch["target_query"], batch["image"].device
+        )
+        return super().forward(**kwargs)
 
 
 @registry.register_affordance_model(name="remote_clip_vit_unet")

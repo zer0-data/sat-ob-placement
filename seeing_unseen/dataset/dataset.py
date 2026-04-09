@@ -54,6 +54,7 @@ class SemanticPlacementTextQueryDataset(Dataset):
         trfms: str = "none",
         load_original_image: bool = False,
         load_depth: bool = False,
+        embeddings_file: str = "clip_embeddings.pkl",
     ) -> None:
         super().__init__()
 
@@ -67,7 +68,7 @@ class SemanticPlacementTextQueryDataset(Dataset):
         else:
             self.metadata = []
 
-        clip_embeddings_file = f"{self.root_dir}/clip_embeddings.pkl"
+        clip_embeddings_file = f"{self.root_dir}/{embeddings_file}"
         self.clip_embeddings = load_pickle(clip_embeddings_file)
 
         if load_original_image:
@@ -149,6 +150,7 @@ class SemanticMultiPlacementTextQueryDataset(Dataset):
         root_dir: str,
         trfms: str = "none",
         load_original_image: bool = False,
+        embeddings_file: str = "clip_embeddings.pkl",
     ) -> None:
         super().__init__()
 
@@ -158,7 +160,7 @@ class SemanticMultiPlacementTextQueryDataset(Dataset):
         metadata_file = f"{self.root_dir}/{split}_records.json"
         self.metadata = load_json(metadata_file)
 
-        clip_embeddings_file = f"{self.root_dir}/clip_embeddings.pkl"
+        clip_embeddings_file = f"{self.root_dir}/{embeddings_file}"
         self.clip_embeddings = load_pickle(clip_embeddings_file)
 
         if load_original_image:
