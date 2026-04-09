@@ -1,1 +1,1 @@
-from seeing_unseen import core, dataset, models, third_party, trainer, utils
+from seeing_unseen import core, dataset, models, terrain, third_party, trainer, utils

@@ -107,6 +107,33 @@ model:
     #   filename='RemoteCLIP-RN50.pt', local_dir='data/pretrained_models')"
     checkpoint_path: "data/pretrained_models/RemoteCLIP-RN50.pt"
 
+# -------------------------------------------------------------------
+# Terrain Guardrailing (VocAda-Inspired Validity Mask)
+# -------------------------------------------------------------------
+terrain_filter:
+  # Master toggle — set to false to disable all terrain filtering
+  enabled: true
+
+  segmentor:
+    # HuggingFace SegFormer checkpoint (auto-cached, ~15 MB for mit-b0)
+    model_name: "nvidia/segformer-b0-finetuned-ade-512-512"
+    # Fallback if transformers is unavailable: "clip_zero_shot" | "none"
+    fallback: "clip_zero_shot"
+    # ADE20K label → canonical terrain ID remap table
+    ade20k_remap_path: "data/metadata/ade20k_to_terrain.json"
+
+  # Path to the military-class deployment constraints file
+  constraints_path: "data/metadata/deployment_constraints.json"
+
+  morphology:
+    # Pixels to dilate forbidden zone boundaries (prevents heatmap leakage)
+    dilation_px: 5
+    # Warn when valid area fraction drops below this threshold
+    min_valid_area_frac: 0.05
+
+  # If false, terrain mask is ONLY applied at eval/inference, not during training.
+  apply_during_training: false
+
 distributed:
   backend: "GLOO"
   # The machine_id of this node
