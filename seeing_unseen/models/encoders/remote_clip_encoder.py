@@ -146,12 +146,14 @@ class RemoteCLIPRN50Encoder(nn.Module):
             # Checkpoint may be the full CLIP model or just visual encoder
             if "state_dict" in state_dict:
                 state_dict = state_dict["state_dict"]
-            # Filter to visual encoder keys if full model checkpoint
-            visual_sd = {
-                k.replace("module.", "").replace("visual.", ""): v
-                for k, v in state_dict.items()
-                if k.startswith("visual.") or "module." not in k
-            }
+            # Filter to visual encoder keys from full model checkpoint.
+            # Only keep keys that belong to the visual encoder — exclude
+            # text encoder, logit_scale, and other non-visual keys.
+            visual_sd = {}
+            for k, v in state_dict.items():
+                clean_k = k.replace("module.", "")
+                if clean_k.startswith("visual."):
+                    visual_sd[clean_k.replace("visual.", "", 1)] = v
             # Try loading into model.visual; fall back to full model
             try:
                 missing, unexpected = model.visual.load_state_dict(

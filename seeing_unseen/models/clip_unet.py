@@ -471,11 +471,6 @@ class RemoteCLIPUNet(CLIPUNet):
         # Pre-computed tensor path
         return target_query.to(device)
 
-    def forward_encoder(self, image, query):
-        # Override to resolve text query before calling parent
-        query = self._resolve_text_query(query, image.device)
-        return super().forward_encoder(image, query)
-
     def forward(self, **kwargs) -> Dict[str, torch.Tensor]:
         batch = kwargs["batch"]
         batch["target_query"] = self._resolve_text_query(
@@ -587,10 +582,40 @@ class RemoteCLIPViTUNet(SPModel):
         self.conv2 = nn.Sequential(nn.Conv2d(16, output_dim, kernel_size=1))
         self.activation = nn.Sigmoid()
 
+        # On-the-fly text encoding (same pattern as RemoteCLIPUNet)
+        self._remote_clip_cfg = cfg
+        self._init_text_encoder()
+
+    def _init_text_encoder(self):
+        """Build the on-the-fly text encoder (used only when target_query is strings)."""
+        checkpoint_path = self._remote_clip_cfg.get("checkpoint_path", None)
+        model_type = self._remote_clip_cfg.get("model_type", "ViT-B-32")
+        templates = self._remote_clip_cfg.get("text_templates", REMOTE_SENSING_TEMPLATES)
+        self._text_encoder = RemoteCLIPTextEncoder(
+            model_name=model_type,
+            checkpoint_path=checkpoint_path,
+            templates=templates,
+        )
+        logger.info(
+            f"RemoteCLIPViTUNet: text encoder ready with {len(templates)} templates."
+        )
+
+    def _resolve_text_query(
+        self,
+        target_query,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Normalise target_query to a float tensor (B, D)."""
+        if isinstance(target_query, (list, tuple)) and isinstance(target_query[0], str):
+            return self._text_encoder.encode(list(target_query)).to(device)
+        return target_query.to(device)
+
     def forward(self, **kwargs) -> Dict[str, torch.Tensor]:
         batch = kwargs["batch"]
         receptacle = batch["image"]
-        target = batch["target_query"]      # (B, D) text embedding or category token
+        target = self._resolve_text_query(
+            batch["target_query"], receptacle.device
+        )  # (B, D) text embedding or category token
 
         input_shape = receptacle.shape
 

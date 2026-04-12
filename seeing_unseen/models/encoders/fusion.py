@@ -30,7 +30,7 @@ class FusionMult(Fusion):
         super(FusionMult, self).__init__(input_dim=input_dim)
 
     def forward(self, x1, x2, x2_proj=None):
-        if x1.shape != x2.shape and len(x1.shape) != len(x2.shape):
+        if x1.shape != x2.shape and len(x1.shape) > len(x2.shape):
             x2 = self.tile_x2(x1, x2, x2_proj)
         return x1 * x2
 
@@ -46,7 +46,7 @@ class FusionConvLat(Fusion):
         )
 
     def forward(self, x1, x2, x2_proj=None):
-        if x1.shape != x2.shape and len(x1.shape) != len(x2.shape):
+        if x1.shape != x2.shape and len(x1.shape) > len(x2.shape):
             x2 = self.tile_x2(x1, x2, x2_proj)
         x = torch.cat([x1, x2], dim=1)  # [B, input_dim, H, W]
         x = self.conv(x)                # [B, output_dim, H, W]
