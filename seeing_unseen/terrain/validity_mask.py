@@ -367,8 +367,3 @@ class MaskedAffordanceModel(SPModel):
 
         return output
 
-
-# ---------------------------------------------------------------------------
-# Import fix: make sure Dict is importable
-# ---------------------------------------------------------------------------
-from typing import Dict  # noqa: E402 (re-imported for clarity)

@@ -81,11 +81,13 @@ class SemanticPlacementTrainer(BaseTrainer):
                 output_mask_key="affordance",
             )
 
+        embeddings_file = getattr(self.cfg.dataset, "embeddings_file", "clip_embeddings.pkl")
         self.train_dataset = dataset_cls(
             split="train",
             trfms="none",
             root_dir=self.dataset_dir,
             load_original_image=self.cfg.training.dataset.load_original_img,
+            embeddings_file=embeddings_file,
         )
 
         self.eval_datasets = {}
@@ -94,6 +96,7 @@ class SemanticPlacementTrainer(BaseTrainer):
                 split=split,
                 trfms="none",
                 root_dir=eval_dataset_dir,
+                embeddings_file=embeddings_file,
             )
             self.eval_datasets[split] = dataset
 
@@ -158,11 +161,31 @@ class SemanticPlacementTrainer(BaseTrainer):
         # Intialize metrics wrapper
         self.semantic_metrics = SemanticPlaceMetrics(self.input_shape, 90)
 
+    def _build_model_kwargs(self) -> dict:
+        """Build extra kwargs for model constructor based on model name."""
+        kwargs = {}
+        model_name = self.cfg.model.name
+
+        # Pass RemoteCLIP config for all remote_clip models
+        if model_name.startswith("remote_clip") and hasattr(self.cfg.model, "remote_clip"):
+            from omegaconf import OmegaConf
+            kwargs["remote_clip_cfg"] = OmegaConf.to_container(
+                self.cfg.model.remote_clip, resolve=True
+            )
+
+        # Pass terrain config for the masked model
+        if model_name == "remote_clip_unet_masked" and hasattr(self.cfg, "terrain_filter"):
+            from omegaconf import OmegaConf
+            kwargs["terrain_cfg"] = self.cfg.terrain_filter
+        return kwargs
+
     def init_model(self) -> None:
         model_cls = registry.get_affordance_model(self.cfg.model.name)
+        model_kwargs = self._build_model_kwargs()
         self.model = model_cls(
             input_shape=self.input_shape,
             target_input_shape=self.target_input_shape,
+            **model_kwargs,
         ).to(self.device)
         self.pretrained_state = defaultdict(int)
 
@@ -198,11 +221,20 @@ class SemanticPlacementTrainer(BaseTrainer):
             )
             logger.info("Initializing using Adam optimizer")
         else:
+            trainable_params = [
+                p for p in self.model.parameters() if p.requires_grad
+            ]
             self.optimizer = torch.optim.SGD(
-                self.model.parameters(),
+                trainable_params,
                 lr=self.cfg.training.lr,
                 momentum=0.9,
                 weight_decay=0.0005,
+            )
+            logger.info(
+                "Total trainable parameters: {}/{}".format(
+                    sum([p.numel() for p in trainable_params]),
+                    sum([p.numel() for p in self.model.parameters()]),
+                )
             )
             logger.info("Initializing using SGD optimizer")
         self.scheduler = StepLR(

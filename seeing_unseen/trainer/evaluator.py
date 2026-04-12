@@ -72,12 +72,14 @@ class SemanticPlacementEvaluator(SemanticPlacementTrainer):
                 output_mask_key="affordance",
             )
 
+        embeddings_file = getattr(self.cfg.dataset, "embeddings_file", "clip_embeddings.pkl")
         self.eval_datasets = {}
         for split in self.cfg.training.eval_splits:
             dataset = dataset_cls(
                 split=split,
                 trfms="none",
                 root_dir=eval_dataset_dir,
+                embeddings_file=embeddings_file,
             )
             self.eval_datasets[split] = dataset
 
@@ -124,9 +126,11 @@ class SemanticPlacementEvaluator(SemanticPlacementTrainer):
 
     def init_model(self) -> None:
         model_cls = registry.get_affordance_model(self.cfg.model.name)
+        model_kwargs = self._build_model_kwargs()
         self.model = model_cls(
             input_shape=self.input_shape,
             target_input_shape=self.target_input_shape,
+            **model_kwargs,
         ).to(self.device)
         self.pretrained_state = defaultdict(int)
 
