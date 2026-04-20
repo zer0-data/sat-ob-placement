@@ -60,6 +60,12 @@ try:
                 return inpt
             return inpt.float() + params["gaussian_noise"].to(inpt.device)
 
+        # torchvision >= 0.17 renamed `_transform` -> `transform` on the
+        # base Transform class. Provide the new name as an alias so this
+        # class works on both old and new APIs.
+        transform = _transform
+        make_params = _get_params
+
     class ClipValues(Transform):
         _v1_transform_cls = None
 
@@ -73,6 +79,10 @@ try:
             if isinstance(inpt, datapoints.Mask) or len(inpt.shape) < 4:
                 return inpt
             return torch.clip(inpt.float(), min=0, max=255.0)
+
+        # Alias for torchvision >= 0.17 compatibility (see GaussianNoise).
+        transform = _transform
+        make_params = _get_params
 
 except Exception as e:
     # If torchvision.transforms.v2 is unavailable we can't define these
