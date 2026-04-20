@@ -27,7 +27,7 @@ dataset:
       - 512
 
 training:
-  trainer: "semantic_placement"
+  trainer: "semantic_placement_trainer"
   epochs: 25
 
   optimizer: "SGD"
