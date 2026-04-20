@@ -61,13 +61,20 @@ def _forward_prepool_rn50(self, x):
     """
     im_feats: List[torch.Tensor] = []
 
+    # open_clip >= 2.20 renamed the stem activations from `relu{1,2,3}`
+    # to `act{1,2,3}` (generalised from ReLU to configurable activation).
+    # Support both names.
+    act1 = getattr(self, "relu1", None) or getattr(self, "act1")
+    act2 = getattr(self, "relu2", None) or getattr(self, "act2")
+    act3 = getattr(self, "relu3", None) or getattr(self, "act3")
+
     def stem(x):
-        for conv, bn, relu in [
-            (self.conv1, self.bn1, self.relu1),
-            (self.conv2, self.bn2, self.relu2),
-            (self.conv3, self.bn3, self.relu3),
+        for conv, bn, act in [
+            (self.conv1, self.bn1, act1),
+            (self.conv2, self.bn2, act2),
+            (self.conv3, self.bn3, act3),
         ]:
-            x = relu(bn(conv(x)))
+            x = act(bn(conv(x)))
             im_feats.append(x)
         x = self.avgpool(x)
         im_feats.append(x)
