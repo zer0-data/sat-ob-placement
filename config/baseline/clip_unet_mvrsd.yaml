@@ -25,7 +25,7 @@ training:
   weight_decay: 0.01
   layer_decay: 1.0           # irrelevant for RN50 (no LLRD); keep default
 
-  batch_size: 16             # fits on a single 24 GB GPU; drop to 8 on <16 GB
+  batch_size: 128            # L40S (46 GB) — occupies ~25 GB. Drop to 64 on 24 GB, 32 on 16 GB.
   log_interval: 20
   save_interval: 1           # checkpoint every epoch (unused internally but kept)
 
@@ -37,7 +37,7 @@ training:
     min_lr: 1.0e-6
 
   dataset:
-    num_workers: 8
+    num_workers: 24            # L40S host has many cores; saturates IO pipeline
     load_original_img: false
 
   loss:
