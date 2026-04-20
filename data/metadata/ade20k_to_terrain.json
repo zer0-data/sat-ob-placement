@@ -1,0 +1,21 @@
+{
+  "_comment": "Maps ADE20K class IDs (0-149) to canonical terrain buckets from seeing_unseen/terrain/terrain_segmentor.py TERRAIN_LABELS. IDs not listed default to 'background' (id 0).",
+  "_terrain_labels": {
+    "0": "background",
+    "1": "flat_open",
+    "2": "road",
+    "3": "water",
+    "4": "dense_forest",
+    "5": "urban",
+    "6": "mud_loose",
+    "7": "steep_terrain"
+  },
+
+  "flat_open": [9, 29, 46, 55, 13, 94, 140],
+  "road": [6, 11, 52, 53, 54, 59, 91],
+  "water": [21, 26, 60, 109, 113, 128, 21],
+  "dense_forest": [4, 17, 66, 72],
+  "urban": [1, 25, 48, 79, 80, 84, 85, 87, 95, 100, 101, 114, 145],
+  "mud_loose": [13, 29, 46],
+  "steep_terrain": [16, 34, 68, 69]
+}
