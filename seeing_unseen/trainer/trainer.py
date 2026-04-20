@@ -123,14 +123,23 @@ class SemanticPlacementTrainer(BaseTrainer):
                 )
 
         # Initialize data loaders
+        # persistent_workers + prefetch_factor are critical for GPU util:
+        # without them workers are re-spawned every epoch (huge overhead)
+        # and only 2 batches are prefetched per worker (GPU starves).
+        _nw = self.cfg.training.dataset.num_workers
+        _loader_kwargs = dict(
+            persistent_workers=_nw > 0,
+            prefetch_factor=4 if _nw > 0 else None,
+        )
         self.train_loader = DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
             collate_fn=collate_fn,
             sampler=self.train_sampler,
-            num_workers=self.cfg.training.dataset.num_workers,
+            num_workers=_nw,
             drop_last=True,
             pin_memory=True,
+            **_loader_kwargs,
         )
 
         self.eval_loader = {}
@@ -140,9 +149,10 @@ class SemanticPlacementTrainer(BaseTrainer):
                 batch_size=self.batch_size,
                 collate_fn=collate_fn,
                 sampler=self.eval_sampler.get(split),
-                num_workers=self.cfg.training.dataset.num_workers,
+                num_workers=_nw,
                 shuffle=False,
                 pin_memory=True,
+                **_loader_kwargs,
             )
 
         # Report split sizes
