@@ -9,7 +9,16 @@ from typing import Any
 import albumentations as A
 import numpy as np
 import torch
+from PIL import Image
 from torch.utils.data import Dataset
+
+# Canonical image size for collation. The transform pipeline may further
+# rescale/crop this during training augmentations, but every __getitem__
+# must return the same shape so torch.stack() works across a batch when
+# the underlying dataset has heterogeneous native resolutions (e.g. MVRSD).
+# This matches RemoteCLIPUNet's input_shape=(3, 480, 640) — see
+# scripts/infer_placement.py and config/baseline/clip_unet_mvrsd.yaml.
+_COLLATE_H, _COLLATE_W = 480, 640
 
 from seeing_unseen.core.logger import logger
 from seeing_unseen.core.registry import registry
@@ -89,11 +98,27 @@ class SemanticPlacementTextQueryDataset(Dataset):
 
         record = self.metadata[index]
 
-        image = np.array(load_image(record["img_path"]))
+        # Load + resize image to a fixed collation size so that
+        # torch.stack() succeeds across a batch even when the source
+        # dataset (e.g. MVRSD) has variable native resolutions.
+        pil_img = load_image(record["img_path"])
+        if pil_img.size != (_COLLATE_W, _COLLATE_H):
+            pil_img = pil_img.resize(
+                (_COLLATE_W, _COLLATE_H), resample=Image.BILINEAR
+            )
+        image = np.array(pil_img)
+        native_w, native_h = pil_img.size  # after resize: (_COLLATE_W, _COLLATE_H)
 
         annotation = random.choice(record["annotations"])
         target_mask = np.array(decode_rle_mask(annotation["segmentation"]))
-        target_mask = np.where(target_mask > 0, 1, 0)
+        target_mask = np.where(target_mask > 0, 1, 0).astype(np.uint8)
+        # Resize mask with nearest-neighbour to the same canonical size
+        if target_mask.shape != (_COLLATE_H, _COLLATE_W):
+            target_mask = np.array(
+                Image.fromarray(target_mask).resize(
+                    (_COLLATE_W, _COLLATE_H), resample=Image.NEAREST
+                )
+            )
 
         target_category = (
             annotation["object_category"].split("|")[0].replace("_", " ")

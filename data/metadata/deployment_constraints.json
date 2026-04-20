@@ -1,0 +1,71 @@
+{
+  "_comment": "Deployment constraints per military asset class. Terrain labels must match seeing_unseen/terrain/terrain_segmentor.py TERRAIN_LABELS: background, flat_open, road, water, dense_forest, urban, mud_loose, steep_terrain.",
+
+  "default": {
+    "forbidden": ["water", "dense_forest", "steep_terrain"]
+  },
+
+  "tank": {
+    "forbidden": ["water", "dense_forest", "steep_terrain", "urban"],
+    "preferred": ["flat_open", "mud_loose"]
+  },
+  "armored_vehicle": {
+    "forbidden": ["water", "dense_forest", "steep_terrain"],
+    "preferred": ["flat_open", "road", "mud_loose"]
+  },
+  "truck": {
+    "forbidden": ["water", "dense_forest", "steep_terrain", "mud_loose"],
+    "preferred": ["road", "flat_open"]
+  },
+  "military_vehicle": {
+    "forbidden": ["water", "dense_forest", "steep_terrain"],
+    "preferred": ["flat_open", "road"]
+  },
+
+  "plane": {
+    "forbidden": ["water", "dense_forest", "urban", "mud_loose", "steep_terrain"],
+    "preferred": ["road", "flat_open"]
+  },
+  "aircraft": {
+    "forbidden": ["water", "dense_forest", "urban", "mud_loose", "steep_terrain"],
+    "preferred": ["road", "flat_open"]
+  },
+  "helicopter": {
+    "forbidden": ["water", "dense_forest", "steep_terrain"],
+    "preferred": ["flat_open", "road", "urban"]
+  },
+
+  "ship": {
+    "forbidden": ["flat_open", "road", "dense_forest", "urban", "mud_loose", "steep_terrain", "background"],
+    "preferred": ["water"]
+  },
+  "warship": {
+    "forbidden": ["flat_open", "road", "dense_forest", "urban", "mud_loose", "steep_terrain", "background"],
+    "preferred": ["water"]
+  },
+  "submarine": {
+    "forbidden": ["flat_open", "road", "dense_forest", "urban", "mud_loose", "steep_terrain", "background"],
+    "preferred": ["water"]
+  },
+  "boat": {
+    "forbidden": ["flat_open", "road", "dense_forest", "urban", "mud_loose", "steep_terrain", "background"],
+    "preferred": ["water"]
+  },
+
+  "radar": {
+    "forbidden": ["water", "dense_forest", "steep_terrain"],
+    "preferred": ["flat_open", "urban"]
+  },
+  "sam_site": {
+    "forbidden": ["water", "dense_forest", "urban"],
+    "preferred": ["flat_open"]
+  },
+  "artillery": {
+    "forbidden": ["water", "dense_forest", "steep_terrain", "urban"],
+    "preferred": ["flat_open", "mud_loose"]
+  },
+  "missile_launcher": {
+    "forbidden": ["water", "dense_forest", "urban"],
+    "preferred": ["flat_open"]
+  }
+}
