@@ -9,7 +9,11 @@ from seeing_unseen.core.base import BaseTransform
 from seeing_unseen.core.registry import registry
 
 try:
-    from torchvision import datapoints
+    # torchvision >= 0.17 renamed `datapoints` to `tv_tensors`.
+    try:
+        from torchvision import tv_tensors as datapoints  # noqa: F401
+    except ImportError:
+        from torchvision import datapoints  # noqa: F401
     from torchvision.transforms.v2 import Transform
 
     class GaussianNoise(Transform):
@@ -70,8 +74,17 @@ try:
                 return inpt
             return torch.clip(inpt.float(), min=0, max=255.0)
 
-except:
-    pass
+except Exception as e:
+    # If torchvision.transforms.v2 is unavailable we can't define these
+    # transforms. Fail loudly so the user knows, instead of silently
+    # leaving GaussianNoise/ClipValues undefined.
+    import warnings
+    warnings.warn(
+        f"Could not import torchvision v2 transforms ({e}); "
+        f"GaussianNoise / ClipValues unavailable. "
+        f"Install torchvision>=0.15 to enable augmentations."
+    )
+    raise
 
 
 @registry.register_transforms(name="segmentation_base")
