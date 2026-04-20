@@ -1,0 +1,72 @@
+defaults:
+  - clip_unet
+  - _self_
+
+# -------------------------------------------------------------------
+# MVRSD-tuned hyperparameters (~3,000 aerial images, 5 classes)
+# -------------------------------------------------------------------
+dataset:
+  root_dir: "data/datasets/mvrsd/"
+  val_dir:  "data/datasets/mvrsd/"
+  embeddings_file: "remote_clip_embeddings.pkl"
+
+  # Aerial images are already large and class-dense; mild augmentation only.
+  transform_args:
+    resize_prob: 0.0
+    random_resize_crop_prob: 0.0
+    resized_resolution:
+      - 480
+      - 640
+
+training:
+  epochs: 40                 # small dataset → more passes, but watch val loss
+  optimizer: "AdamW"         # far more stable than SGD on a ~15M param decoder
+  lr: 3.0e-4                 # decoder-only; backbone frozen
+  weight_decay: 0.01
+  layer_decay: 1.0           # irrelevant for RN50 (no LLRD); keep default
+
+  batch_size: 16             # fits on a single 24 GB GPU; drop to 8 on <16 GB
+  log_interval: 20
+  save_interval: 1           # checkpoint every epoch (unused internally but kept)
+
+  lr_scheduler:
+    name: "StepLR"
+    warmup_epochs: 2         # was 5 — too long for a 40-epoch run
+    step_decay: 12           # halve LR twice across training
+    gamma: 0.5
+    min_lr: 1.0e-6
+
+  dataset:
+    num_workers: 8
+    load_original_img: false
+
+  loss:
+    name: "soft_dice"
+    soft_dice:
+      eps: 1.0e-7
+
+  eval_splits:
+    - "val"
+
+model:
+  name: "remote_clip_unet_masked"   # enables terrain guardrailing at eval
+  remote_clip:
+    model_type: "RN50"
+    checkpoint_path: "data/pretrained_models/RemoteCLIP-RN50.pt"
+
+terrain_filter:
+  enabled: true
+  apply_during_training: false      # keep training signal clean
+  morphology:
+    dilation_px: 5
+    min_valid_area_frac: 0.05
+
+wandb:
+  entity: axel81
+  project: sat-ob-placement
+  name: mvrsd_remoteclip_rn50
+  job_type: train
+
+checkpoint_dir: "outputs/checkpoints/mvrsd/"
+log_dir: "outputs/logs/mvrsd/"
+seed: 42
