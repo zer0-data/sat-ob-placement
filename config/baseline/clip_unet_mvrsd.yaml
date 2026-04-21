@@ -19,7 +19,7 @@ dataset:
       - 640
 
 training:
-  epochs: 40                 # small dataset → more passes, but watch val loss
+  epochs: 4                  # short smoke-test run; bump to 40 for a real training run
   optimizer: "AdamW"         # far more stable than SGD on a ~15M param decoder
   lr: 3.0e-4                 # decoder-only; backbone frozen
   weight_decay: 0.01
@@ -31,8 +31,8 @@ training:
 
   lr_scheduler:
     name: "StepLR"
-    warmup_epochs: 2         # was 5 — too long for a 40-epoch run
-    step_decay: 12           # halve LR twice across training
+    warmup_epochs: 1         # 25% of a 4-epoch run — any more eats the whole training
+    step_decay: 100          # effectively disabled for a 4-epoch smoke run
     gamma: 0.5
     min_lr: 1.0e-6
 
